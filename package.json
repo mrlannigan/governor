@@ -1,0 +1,25 @@
+{
+  "name": "governor",
+  "version": "0.0.0",
+  "description": "Distributes work to local or remote agents",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mrlannigan/governor.git"
+  },
+  "keywords": [
+    "process",
+    "work",
+    "queue",
+    "monitor"
+  ],
+  "author": "Julian Lannigan <julian.lannigan@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/mrlannigan/governor/issues"
+  },
+  "homepage": "https://github.com/mrlannigan/governor"
+}
