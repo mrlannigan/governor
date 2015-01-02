@@ -1,4 +1,3 @@
 'use strict';
 
-console.log('don\'t use, wip');
-
+module.exports = require('./lib');
