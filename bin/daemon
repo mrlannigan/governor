@@ -1,0 +1,74 @@
+#!/usr/bin/env node
+
+'use strict';
+
+var Bunyan = require('bunyan'),
+    BPromise = require('bluebird'),
+    log = require('./../lib/log'),
+    Daemon = require('./../lib/daemon/index'),
+    Application = require('./../lib/index'),
+    args = new Daemon.Arguments(process.argv),
+    app,
+    logger,
+    startupLogger;
+
+if (args.error) {
+    console.error(args.error.toString());
+    console.error('');
+    console.error(args.getHelpText());
+    process.exit(1);
+}
+
+if (args.h) {
+    console.log(args.getHelpText());
+    process.exit(0);
+}
+
+// create logger
+logger = Bunyan.createLogger({
+    name: 'governor',
+    streams: [{
+        stream: process.stdout,
+        level: args.environment.development ? Bunyan.TRACE : Bunyan.INFO
+    }],
+    serializers: log.serializers
+});
+startupLogger = logger.child({startup: true});
+startupLogger.debug(args);
+
+startupLogger.trace('creating application');
+app = new Application();
+app.setArguments(args)
+    .setLogger(logger, startupLogger)
+    .setNodeName(args.n);
+
+app.listen().then(function () {
+    startupLogger.info('application listening');
+
+    return BPromise.resolve()
+        .delay(500)
+        .then(function () {
+            app.beginElection();
+        })
+        .catch(BPromise.CancellationError, function () {
+            startupLogger.info('already found elected master');
+        });
+}).catch(function (err) {
+    startupLogger.error({err: err}, 'application failed to listen');
+});
+
+process.on('SIGTERM', function () {
+    logger.error('received SIGTERM, closing server connections');
+    app.close().finally(function () {
+        logger.error('closed server');
+        process.exit(0);
+    });
+});
+
+process.on('SIGINT', function () {
+    logger.error('received SIGINT, closing server connections');
+    app.close().finally(function () {
+        logger.error('closed server');
+        process.exit(0);
+    });
+});

@@ -21,9 +21,19 @@
   "bugs": {
     "url": "https://github.com/mrlannigan/governor/issues"
   },
+  "bin": {
+    "governor": "bin/daemon"
+  },
+  "preferGlobal": true,
   "homepage": "https://github.com/mrlannigan/governor",
   "dependencies": {
+    "bluebird": "^2.x.x",
     "bossy": "^1.x.x",
-    "hoek-boom": "^1.x.x"
+    "bunyan": "^1.x.x",
+    "hapi": "^8.x.x",
+    "hoek-boom": "^1.x.x",
+    "joi": "^5.x.x",
+    "socket.io": "^1.x.x",
+    "socket.io-client": "^1.x.x"
   }
 }
