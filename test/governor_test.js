@@ -32,21 +32,7 @@ describe('governor', function () {
     });
 
     it('should create a couple governors', function (done) {
-        var ok = BPromise.all([createServer({
-            priority: 1,
-            nodeHostname: '127.0.0.1',
-            port: 8080,
-            n: 'testhost1',
-            nodes: ['localhost:8080', 'localhost:8081']
-        }),
-            createServer({
-                priority: 1,
-                nodeHostname: '127.0.0.1',
-                port: 8081,
-                n: 'testhost1',
-                nodes: ['localhost:8080', 'localhost:8081']
-            })
-        ]);
+        var ok = createServers(2);
 
         ok = ok.then(function (apps) {
             apps.should.have.lengthOf(2);
@@ -55,6 +41,8 @@ describe('governor', function () {
             });
         });
 
+        ok.delay(1000);
+
         ok.done(function () {
             done();
         }, function () {
@@ -62,7 +50,109 @@ describe('governor', function () {
         });
     });
 
+    it('should respond to send-shared-state', function (done) {
+
+        var ok = createServers(2);
+
+        ok = ok.delay(1000); // wait a second for elections to finish
+
+        ok = ok.then(function (apps) {
+            var prom;
+
+            apps.should.have.lengthOf(2);
+
+            apps[0].state.isMaster.should.be.true;
+            apps[1].state.isMaster.should.be.false;
+
+            prom = apps[1].state.cluster[0].emitPromise('send-shared-state').then(function (data) {
+                data.should.have.property('version', 0);
+                data.should.have.property('locks');
+            });
+
+            prom = prom.then(function () {
+                BPromise.each(apps, function (app) {
+                    app.close();
+                });
+            });
+
+            return prom;
+        });
+
+        ok.done(done, done);
+    });
+
+    it('should handle cluster-place-locks to update lock state', function (done) {
+        var ok = createServers(2);
+
+        ok = ok.delay(1000); // wait a second for elections to finish
+
+        ok = ok.then(function (apps) {
+            var main, backup,
+                lockData = [{key: 'testlock', locking: true}],
+                date = Date.now(),
+                prom;
+
+            apps.should.have.lengthOf(2);
+
+            main = apps[0];
+            backup = apps[1];
+
+            main.state.isMaster.should.be.true;
+            backup.state.isMaster.should.be.false;
+
+            main.state.shared.version = 1;
+            main.state.shared.locks = {'testlock': date};
+
+            prom = main.state.cluster[0].emitPromise('cluster-place-locks', lockData, date, main.state.shared.version);
+
+            prom = prom.then(function () {
+                backup.state.shared.should.have.property('version', 1);
+                backup.state.shared.should.have.property('locks');
+                backup.state.shared.locks.should.have.property('testlock', date);
+            });
+
+            prom = prom.then(function () {
+                BPromise.each(apps, function (app) {
+                    app.close();
+                });
+            });
+
+            return prom;
+        });
+
+        ok.done(done, done);
+    });
+
+
+
 });
+
+
+
+function createServers(count) {
+    var portindex = 0,
+        nameindex = 0,
+        proms = [],
+        nodes = [],
+        priority = count;
+
+    while (portindex < count) {
+        nodes.push('localhost:808' + portindex++);
+    }
+
+    while (nameindex < count) {
+
+        proms.push(createServer({
+            priority: priority--,
+            nodeHostname: '127.0.0.1',
+            port: 8080 + nameindex,
+            n: 'testhost' + nameindex++,
+            nodes: nodes
+        }));
+    }
+
+    return BPromise.all(proms);
+}
 
 
 function createServer(args) {
@@ -71,7 +161,7 @@ function createServer(args) {
             name: 'governor',
             streams: [{
                 stream: process.stdout,
-                level: Bunyan.INFO
+                level: Bunyan.ERROR
             }],
             serializers: log.serializers
         }),
