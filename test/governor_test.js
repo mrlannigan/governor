@@ -41,7 +41,7 @@ describe('governor', function () {
             });
         });
 
-        ok.delay(1000);
+        ok.delay(100);
 
         ok.done(function () {
             done();
@@ -54,7 +54,7 @@ describe('governor', function () {
 
         var ok = createServers(2);
 
-        ok = ok.delay(1000); // wait a second for elections to finish
+        ok = ok.delay(100); // wait a second for elections to finish
 
         ok = ok.then(function (apps) {
             var prom;
@@ -84,7 +84,7 @@ describe('governor', function () {
     it('should handle cluster-place-locks to update lock state', function (done) {
         var ok = createServers(2);
 
-        ok = ok.delay(1000); // wait a second for elections to finish
+        ok = ok.delay(100); // wait a second for elections to finish
 
         ok = ok.then(function (apps) {
             var main, backup,
@@ -123,10 +123,63 @@ describe('governor', function () {
         ok.done(done, done);
     });
 
+    it('should sync if it gets out of step with master', function (done) {
+        var ok = createServers(2);
 
+        ok = ok.delay(100); // wait a bit for elections to finish
+
+        ok = ok.then(function (apps) {
+            var main, backup,
+                lockData = [{key: 'testlock', locking: true}],
+                date = Date.now(),
+                prom;
+
+            apps.should.have.lengthOf(2);
+
+            main = apps[0];
+            backup = apps[1];
+
+            main.state.isMaster.should.be.true;
+            backup.state.isMaster.should.be.false;
+
+            main.state.shared.version = 10;
+            main.state.shared.locks = {'testlock': date};
+
+            // the initial state of the backup should be version 0
+            backup.state.shared.should.have.property('version', 0);
+
+            prom = main.state.cluster[0].emitPromise('cluster-place-locks', lockData, date, main.state.shared.version);
+
+            // immediately after cluster place locks, the backup shared state should have version 1
+            prom = prom.then(function () {
+                backup.state.shared.should.have.property('version', 1);
+                backup.state.shared.should.have.property('locks');
+                backup.state.shared.locks.should.have.property('testlock', date);
+            });
+
+            prom = prom.delay(1); // wait a second for the sync to happen
+
+            // then the sync should get fired and its version should get in sync with master
+            prom = prom.then(function () {
+                backup.state.shared.should.have.property('version', 10);
+                backup.state.shared.should.have.property('locks');
+                backup.state.shared.locks.should.have.property('testlock', date);
+            });
+
+            prom = prom.then(function () {
+                BPromise.each(apps, function (app) {
+                    app.close();
+                });
+            });
+
+            return prom;
+
+        });
+
+        ok.done(done, done);
+    });
 
 });
-
 
 
 function createServers(count) {
