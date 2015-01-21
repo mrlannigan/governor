@@ -4,7 +4,7 @@
   "description": "Distributes work to local and/or remote agents",
   "main": "index.js",
   "scripts": {
-    "test": "lab -t 90 -e development -m 30000 ./test"
+    "test": "lab -t 90 -e development -m 10000 ./test"
   },
   "repository": {
     "type": "git",
