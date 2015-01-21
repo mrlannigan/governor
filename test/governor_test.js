@@ -204,7 +204,7 @@ describe('governor', function () {
 
         ok = ok.then(function (apps) {
             var main, backup,
-                lockData = [{key: 'testlock', locking: true}],
+                lockData = {agent_name: 'testagent', job_name: 'myjob', lock_data: [{key: 'testlock', locking: true}]},
                 date = Date.now(),
                 agentconn = agentConnect();
 
@@ -252,7 +252,7 @@ describe('governor', function () {
 
         ok = ok.then(function (apps) {
             var main, backup,
-                lockData = [{key: 'testlock', locking: true}],
+                lockData = {agent_name:'testagent', job_name:'myjob', lock_data: [{key: 'testlock', locking: true}]},
                 date = Date.now(),
                 prom,
                 agentconn = agentConnect();
@@ -266,7 +266,7 @@ describe('governor', function () {
             backup.state.isMaster.should.be.false;
 
             main.state.shared.version = 10;
-            main.state.shared.locks = {'testlock': date};
+            main.state.shared.locks = {'someotherkey': date};
 
             // the initial state of the backup should be version 0
             backup.state.shared.should.have.property('version', 0);
@@ -274,19 +274,12 @@ describe('governor', function () {
             prom = agentconn.emitPromise('handle-locks', lockData, date);
 
             //todo: add spy to make sure the sync process is happening
-            // immediately after cluster place locks, the backup shared state should have version 1
-            prom = prom.then(function () {
-                backup.state.shared.should.have.property('version', 1);
-                backup.state.shared.should.have.property('locks');
-                backup.state.shared.locks.should.have.property('testlock', date);
-            });
-
-            prom = prom.delay(100);
 
             // then the sync should get fired and its version should get in sync with master
             prom = prom.then(function () {
-                backup.state.shared.should.have.property('version', 10);
+                backup.state.shared.should.have.property('version', 11);
                 backup.state.shared.should.have.property('locks');
+                backup.state.shared.locks.should.have.property('someotherkey', date);
                 backup.state.shared.locks.should.have.property('testlock', date);
             });
 
@@ -313,7 +306,7 @@ describe('governor', function () {
 
         ok = ok.then(function (apps) {
             var main, backup0, backup1, backup2, backup3,
-                lockData = [{key: 'testlock', locking: true}],
+                lockData = {agent_name:'testagent', job_name:'myjob', lock_data: [{key: 'testlock', locking: true}]},
                 date = Date.now(),
                 prom,
                 agentconn = agentConnect();
@@ -331,7 +324,7 @@ describe('governor', function () {
             });
 
             main.state.shared.version = 10;
-            main.state.shared.locks = {'testlock': date};
+            main.state.shared.locks = {'someotherlock': date};
 
             // the initial state of the backup should be version 0
             apps.forEach(function (app) {
@@ -340,24 +333,13 @@ describe('governor', function () {
 
             prom = agentconn.emitPromise('handle-locks', lockData, date);
 
-            // immediately after cluster place locks, the backup shared state should have version 1
+            // the backups should sync with master
             prom = prom.then(function () {
                 apps.forEach(function (app) {
-                    app.state.shared.should.have.property('version', 1);
+                    app.state.shared.should.have.property('version', 11);
                     app.state.shared.should.have.property('locks');
                     app.state.shared.locks.should.have.property('testlock', date);
-                })
-
-            });
-
-            prom = prom.delay(100); // wait a second for the sync to happen
-
-            // then the sync should get fired and its version should get in sync with master
-            prom = prom.then(function () {
-                apps.forEach(function (app) {
-                    app.state.shared.should.have.property('version', 10);
-                    app.state.shared.should.have.property('locks');
-                    app.state.shared.locks.should.have.property('testlock', date);
+                    app.state.shared.locks.should.have.property('someotherlock', date);
                 });
             });
 
@@ -396,7 +378,7 @@ describe('governor', function () {
 
             return prom.then(function () {
                 apps.forEach(function (app) {
-                    app.state.jobs['myjob'].should.have.property('active_jobs', []);
+                    app.state.jobs['myjob'].should.have.property('active_jobs', {});
                 });
 
                 agentconn.close();
@@ -434,7 +416,7 @@ describe('governor', function () {
 
             prom = prom.then(function () {
                 apps.forEach(function (app) {
-                    app.state.jobs[jobname].should.have.property('active_jobs', []);
+                    app.state.jobs[jobname].should.have.property('active_jobs', {});
                     // app.state.agents[agentname].jobs.should.have.property(jobname);
                 });
             });
