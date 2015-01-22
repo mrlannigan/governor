@@ -6,11 +6,11 @@ var Lab = require('lab'),
     lab = exports.lab = Lab.script(),
     describe = lab.describe,
     it = lab.it,
-    before = lab.before,
     BPromise = require('bluebird'),
     Bunyan = require('bunyan'),
     Application = require('../lib/application'),
     socketClient = require('socket.io-client'),
+    basecontroller = require('../lib/baseController'),
     log = require('../lib/log');
 
 function agentConnect() {
@@ -137,6 +137,7 @@ describe('governor', function () {
 
         ok = ok.then(function (apps) {
             apps.should.have.lengthOf(2);
+            apps[0].state.cluster.should.have.lengthOf(1);
             return BPromise.each(apps, function (app) {
                 app.close();
             });
@@ -189,7 +190,12 @@ describe('governor', function () {
         ok = ok.then(function (apps) {
             var main, backup,
                 date = Date.now(),
-                lockData = {agent_name: 'testagent', job_name: 'myjob', lock_data: [{key: 'testlock', locking: true}], date: date},
+                lockData = {
+                    agent_name: 'testagent',
+                    job_name: 'myjob',
+                    lock_data: [{key: 'testlock', locking: true}],
+                    date: date
+                },
                 agentconn = agentConnect();
 
 
@@ -237,7 +243,12 @@ describe('governor', function () {
         ok = ok.then(function (apps) {
             var main, backup,
                 date = Date.now(),
-                lockData = {agent_name:'testagent', job_name:'myjob', lock_data: [{key: 'testlock', locking: true}], date: date},
+                lockData = {
+                    agent_name: 'testagent',
+                    job_name: 'myjob',
+                    lock_data: [{key: 'testlock', locking: true}],
+                    date: date
+                },
                 prom,
                 agentconn = agentConnect();
 
@@ -292,7 +303,12 @@ describe('governor', function () {
         ok = ok.then(function (apps) {
             var main, backup0, backup1, backup2, backup3,
                 date = Date.now(),
-                lockData = {agent_name:'testagent', job_name:'myjob', lock_data: [{key: 'testlock', locking: true}], date: date},
+                lockData = {
+                    agent_name: 'testagent',
+                    job_name: 'myjob',
+                    lock_data: [{key: 'testlock', locking: true}],
+                    date: date
+                },
                 prom,
                 agentconn = agentConnect();
 
@@ -366,7 +382,7 @@ describe('governor', function () {
 
             return prom.then(function () {
                 apps.forEach(function (app) {
-                    app.state.jobs[jobname].should.have.property('active_jobs', {});
+                    app.state.jobs.should.have.property('active_jobs', {});
                 });
 
                 agentconn.close();
@@ -385,7 +401,8 @@ describe('governor', function () {
     it('should track job activity', function (done) {
         var ok = createServers(2),
             agentname = 'agent1',
-            jobname = 'myjob';
+            jobname = 'myjob',
+            date = Date.now();
 
         ok = ok.delay(100);
 
@@ -404,22 +421,33 @@ describe('governor', function () {
 
             prom = prom.then(function () {
                 apps.forEach(function (app) {
-                    app.state.jobs[jobname].should.have.property('active_jobs', {});
+                    app.state.jobs.should.have.property('active_jobs', {});
                     app.state.agents[agentname].jobs.should.have.property(jobname);
                 });
             });
 
             prom = prom.then(function () {
-                return agentconn.emitPromise('job-start', jobname, agentname);
+                return agentconn.emitPromise('job-start', agentname, jobname, date);
             });
 
-
-            //prom = prom.then(function () {
-            //
-            //});
+            prom = prom.then(function (job) {
+                apps.forEach(function (app) {
+                    var jobs = app.state.jobs;
+                    jobs.active_jobs.should.have.property(job.id);
+                });
+                return agentconn.emitPromise('job-end', job.id);
+            });
 
             prom = prom.then(function () {
-                console.log('closing stuff');
+                apps.forEach(function (app) {
+                    app.state.jobs[jobname].should.have.property('completed', 1);
+                    app.state.jobs[jobname].should.have.property('avg_duration');
+                    app.state.agents[agentname].jobs[jobname].should.have.property('completed', 1);
+                    app.state.agents[agentname].jobs[jobname].should.have.property('avg_duration');
+                });
+            });
+
+            prom = prom.then(function () {
                 agentconn.close();
                 return BPromise.each(apps, function (app) {
                     app.close();
@@ -432,6 +460,11 @@ describe('governor', function () {
         ok.done(function () {
             done();
         }, done);
+    });
+
+    it('should calculate an average duration', function (done) {
+        basecontroller.computeAverage(2, 4, 7).should.equal(5);
+        done();
     });
 
 });
