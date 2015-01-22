@@ -10,13 +10,13 @@ var Lab = require('lab'),
     BPromise = require('bluebird'),
     Bunyan = require('bunyan'),
     Application = require('../lib/application'),
-    SocketClient = require('socket.io-client'),
+    socketClient = require('socket.io-client'),
     log = require('../lib/log');
 
 function agentConnect() {
     //todo: make this port configurable
     var agenturl = 'http://localhost:8080/agent',
-        agentconnection = SocketClient(agenturl, {autoConnect: false});
+        agentconnection = socketClient(agenturl, {autoConnect: false});
 
     agentconnection.open();
 
@@ -39,7 +39,7 @@ function agentConnect() {
     };
 
     return agentconnection;
-};
+}
 
 /**
  * add port
@@ -83,7 +83,7 @@ function createServer(args) {
             }],
             serializers: log.serializers
         }),
-        startupLogger = logger.child({startup: true})
+        startupLogger = logger.child({startup: true});
 
 
     var app = new Application();
@@ -108,22 +108,6 @@ function createServer(args) {
 
     }).catch(function (err) {
         startupLogger.info({err: err}, 'application failed to listen');
-    });
-
-    process.on('SIGTERM', function () {
-        logger.error('received SIGTERM, closing server connections');
-        app.close().finally(function () {
-            logger.error('closed server');
-            process.exit(0);
-        });
-    });
-
-    process.on('SIGINT', function () {
-        logger.error('received SIGINT, closing server connections');
-        app.close().finally(function () {
-            logger.error('closed server');
-            process.exit(0);
-        });
     });
 }
 
@@ -204,8 +188,8 @@ describe('governor', function () {
 
         ok = ok.then(function (apps) {
             var main, backup,
-                lockData = {agent_name: 'testagent', job_name: 'myjob', lock_data: [{key: 'testlock', locking: true}]},
                 date = Date.now(),
+                lockData = {agent_name: 'testagent', job_name: 'myjob', lock_data: [{key: 'testlock', locking: true}], date: date},
                 agentconn = agentConnect();
 
 
@@ -232,7 +216,7 @@ describe('governor', function () {
                 agentconn.close();
                 return BPromise.each(apps, function (app) {
                     app.close();
-                })
+                });
             });
 
             return prom.then(function () {
@@ -252,8 +236,8 @@ describe('governor', function () {
 
         ok = ok.then(function (apps) {
             var main, backup,
-                lockData = {agent_name:'testagent', job_name:'myjob', lock_data: [{key: 'testlock', locking: true}]},
                 date = Date.now(),
+                lockData = {agent_name:'testagent', job_name:'myjob', lock_data: [{key: 'testlock', locking: true}], date: date},
                 prom,
                 agentconn = agentConnect();
 
@@ -272,6 +256,7 @@ describe('governor', function () {
             backup.state.shared.should.have.property('version', 0);
 
             prom = agentconn.emitPromise('handle-locks', lockData, date);
+
 
             //todo: add spy to make sure the sync process is happening
 
@@ -306,11 +291,10 @@ describe('governor', function () {
 
         ok = ok.then(function (apps) {
             var main, backup0, backup1, backup2, backup3,
-                lockData = {agent_name:'testagent', job_name:'myjob', lock_data: [{key: 'testlock', locking: true}]},
                 date = Date.now(),
+                lockData = {agent_name:'testagent', job_name:'myjob', lock_data: [{key: 'testlock', locking: true}], date: date},
                 prom,
                 agentconn = agentConnect();
-            ;
 
             apps.should.have.lengthOf(5);
 
@@ -368,17 +352,21 @@ describe('governor', function () {
         ok = ok.then(function (apps) {
             var main = apps[0],
                 agentconn = agentConnect(),
-                prom = agentconn.emitPromise('identify', 'agent1');
+                jobname = 'myjob',
+                agentname = 'agent1',
+                prom = agentconn.emitPromise('identify', agentname);
+
+            main.state.isMaster.should.be.true;
 
             prom = prom.delay(100);
 
             prom = prom.then(function () {
-                return agentconn.emitPromise('register-job', 'myjob', 'agent1');
+                return agentconn.emitPromise('register-job', jobname, agentname);
             });
 
             return prom.then(function () {
                 apps.forEach(function (app) {
-                    app.state.jobs['myjob'].should.have.property('active_jobs', {});
+                    app.state.jobs[jobname].should.have.property('active_jobs', {});
                 });
 
                 agentconn.close();
@@ -406,26 +394,32 @@ describe('governor', function () {
                 agentconn = agentConnect(),
                 prom;
 
+            main.state.isMaster.should.be.true;
+
             prom = agentconn.emitPromise('identify', agentname);
 
             prom = prom.then(function () {
-                agentconn.emitPromise('register-job', jobname, agentname);
+                return agentconn.emitPromise('register-job', jobname, agentname);
             });
-
-            prom = prom.delay(100);
 
             prom = prom.then(function () {
                 apps.forEach(function (app) {
                     app.state.jobs[jobname].should.have.property('active_jobs', {});
-                    // app.state.agents[agentname].jobs.should.have.property(jobname);
+                    app.state.agents[agentname].jobs.should.have.property(jobname);
                 });
             });
 
             prom = prom.then(function () {
-                agentconn.emitPromise('job-start', jobname, agentname);
+                return agentconn.emitPromise('job-start', jobname, agentname);
             });
 
+
+            //prom = prom.then(function () {
+            //
+            //});
+
             prom = prom.then(function () {
+                console.log('closing stuff');
                 agentconn.close();
                 return BPromise.each(apps, function (app) {
                     app.close();
