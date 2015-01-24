@@ -33,6 +33,7 @@
     "hapi": "^8.x.x",
     "hoek-boom": "^1.x.x",
     "joi": "^5.x.x",
+    "measured": "^0.x.x",
     "socket.io": "^1.x.x"
   },
   "devDependencies": {
