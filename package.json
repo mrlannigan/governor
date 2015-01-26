@@ -4,7 +4,7 @@
   "description": "Distributes work to local and/or remote agents",
   "main": "index.js",
   "scripts": {
-    "test": "lab -t 90 -e development -m 10000 -v ./test"
+    "test": "lab -t 90 -e development -m 3000 -v ./test"
   },
   "repository": {
     "type": "git",
@@ -33,6 +33,7 @@
     "hapi": "^8.x.x",
     "hoek-boom": "^1.x.x",
     "joi": "^5.x.x",
+    "measured": "^0.x.x",
     "socket.io": "^1.x.x"
   },
   "devDependencies": {
