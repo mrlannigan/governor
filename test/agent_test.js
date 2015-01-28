@@ -6,6 +6,7 @@ var Lab = require('lab'),
     lab = exports.lab = Lab.script(),
     describe = lab.describe,
     it = lab.it,
+    sinon = require('sinon'),
     BPromise = require('bluebird'),
     basecontroller = require('../lib/baseController'),
     utils = require('./test_utils');
@@ -244,9 +245,12 @@ describe('agents', function () {
                 job_name: jobname,
                 lock_data: [{key: 'testlock', locking: true}],
                 date: date
-            },
+            };
 
         ok = ok.delay(100);
+
+        // spy on the start job function
+        sinon.spy(basecontroller, 'startJob');
 
         ok = ok.then(function (apps) {
             var main = apps[0],
@@ -274,6 +278,9 @@ describe('agents', function () {
 
             prom = prom.then(function (status) {
 
+                // startJob is called once by each governor in the cluster
+                basecontroller.startJob.callCount.should.equal(2);
+                basecontroller.startJob.restore();
                 apps.forEach(function (app) {
                     var jobs = app.state.jobs;
                     jobs.active_jobs.should.have.property(status.id);
@@ -293,6 +300,96 @@ describe('agents', function () {
                     [job, agent, agentjob].forEach(function (stats) {
                         stats.meter.toJSON().should.have.property('count', 1);
                         stats.histogram.toJSON().should.have.property('count', 1);
+                    });
+                });
+            });
+
+            prom = prom.then(function () {
+                agentconn.close();
+                return BPromise.each(apps, function (app) {
+                    app.close();
+                });
+            });
+
+            return prom;
+        });
+
+        ok.done(function () {
+            done();
+        }, done);
+    });
+
+    it('should reject if it ends a job that doesnt exist', function (done) {
+        var ok = utils.createServers(2),
+            agentname = 'agent1',
+            jobname = 'myjob',
+            date = Date.now(),
+            lockData = {
+                agent_name: agentname,
+                job_name: jobname,
+                lock_data: [{key: 'testlock', locking: true}],
+                date: date
+            };
+
+        ok = ok.delay(100);
+
+        // spy on the start job function
+        sinon.spy(basecontroller, 'startJob');
+
+        ok = ok.then(function (apps) {
+            var main = apps[0],
+                agentconn = utils.agentConnect(),
+                prom;
+
+            main.state.isMaster.should.be.true;
+
+            prom = agentconn.emitPromise('identify', agentname);
+
+            prom = prom.then(function () {
+                return agentconn.emitPromise('register-job', jobname, agentname);
+            });
+
+            prom = prom.then(function () {
+                apps.forEach(function (app) {
+                    app.state.jobs.should.have.property('active_jobs', {});
+                    app.state.agents[agentname].jobs.should.have.property(jobname);
+                });
+            });
+
+            prom = prom.then(function () {
+                return agentconn.emitPromise('handle-locks', lockData);
+            });
+
+            prom = prom.then(function (status) {
+
+                // startJob is called once by each governor in the cluster
+                basecontroller.startJob.callCount.should.equal(2);
+                basecontroller.startJob.restore();
+                apps.forEach(function (app) {
+                    var jobs = app.state.jobs;
+                    jobs.active_jobs.should.have.property(status.id);
+                });
+                lockData.id = status.id;
+                return agentconn.emitPromise('job-end', {
+                    agent_name: agentname,
+                    job_name: 'bad job name',
+                    lock_data: [{key: 'testlock', locking: true}],
+                    date: date
+                });
+            });
+
+            prom = prom.delay(1000);
+
+            prom = prom.catch(function (err) {
+                err.should.exists;
+                apps.forEach(function (app) {
+                    var job = app.state.jobs[jobname],
+                        agent = app.state.agents[agentname],
+                        agentjob = agent.jobs[jobname];
+
+                    [job, agent, agentjob].forEach(function (stats) {
+                        stats.meter.toJSON().should.have.property('count', 0);
+                        stats.histogram.toJSON().should.have.property('count', 0);
                     });
                 });
             });
