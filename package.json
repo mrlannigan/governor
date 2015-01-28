@@ -31,7 +31,7 @@
     "bossy": "^1.x.x",
     "bunyan": "^1.x.x",
     "hapi": "^8.x.x",
-    "hoek-boom": "^1.x.x",
+    "hoek-boom": "^1.1.0",
     "joi": "^5.x.x",
     "measured": "^0.x.x",
     "socket.io": "^1.x.x"
@@ -39,6 +39,7 @@
   "devDependencies": {
     "lab": "^5.x.x",
     "should": "^4.x.x",
+    "sinon": "^1.12.2",
     "socket.io-client": "^1.x.x"
   }
 }

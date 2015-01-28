@@ -24,8 +24,13 @@ exports.agentConnect = function () {
             args[i] = arguments[i];
         }
 
-        return new BPromise(function (resolve) {
+        return new BPromise(function (resolve, reject) {
             args.push(function (data) {
+                var err;
+                if (data && data.isError) {
+                    err = new Error(data.message);
+                    return reject(err);
+                }
                 resolve(data);
             });
             agentconnection.emit.apply(agentconnection, args);
