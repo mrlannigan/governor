@@ -37,6 +37,7 @@
     "socket.io": "^1.x.x"
   },
   "devDependencies": {
+    "jscs": "^1.10.0",
     "lab": "^5.x.x",
     "should": "^4.x.x",
     "sinon": "^1.12.2",

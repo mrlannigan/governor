@@ -8,7 +8,7 @@ var Lab = require('lab'),
     it = lab.it,
     sinon = require('sinon'),
     BPromise = require('bluebird'),
-    basecontroller = require('../lib/baseController'),
+    basecontroller = require('../lib/baseController').prototype,
     utils = require('./test_utils');
 
 
@@ -28,7 +28,8 @@ describe('agents', function () {
                     lock_data: [{key: 'testlock', locking: true}],
                     date: date
                 },
-                agentconn = utils.agentConnect();
+                agentconn = utils.agentConnect(),
+                prom;
 
 
             apps.should.have.lengthOf(2);
@@ -39,7 +40,7 @@ describe('agents', function () {
             main.state.isMaster.should.be.true;
             backup.state.isMaster.should.be.false;
 
-            var prom = agentconn.emitPromise('identify', 'testagent');
+            prom = agentconn.emitPromise('identify', 'testagent');
 
             prom = prom.then(function () {
                 return agentconn.emitPromise('handle-locks', lockData, date);
@@ -53,14 +54,14 @@ describe('agents', function () {
                 status.should.have.property('version', 1);
 
                 main.state.shared.version = 1;
-                main.state.shared.locks = {'testlock': date};
+                main.state.shared.locks = {testlock: date};
 
                 backup.state.shared.should.have.property('version', 1);
                 backup.state.shared.should.have.property('locks');
                 backup.state.shared.locks.should.have.property('testlock');
                 backup.state.shared.locks.testlock.should.have.property('date', date);
 
-                agentconn.close()
+                agentconn.close();
             });
 
             prom = prom.delay(100);
@@ -107,7 +108,7 @@ describe('agents', function () {
             backup.state.isMaster.should.be.false;
 
             main.state.shared.version = 10;
-            main.state.shared.locks = {'someotherkey': date};
+            main.state.shared.locks = {someotherkey: date};
 
             // the initial state of the backup should be version 0
             backup.state.shared.should.have.property('version', 0);
@@ -182,7 +183,7 @@ describe('agents', function () {
             });
 
             main.state.shared.version = 10;
-            main.state.shared.locks = {'someotherlock': date};
+            main.state.shared.locks = {someotherlock: date};
 
             // the initial state of the backup should be version 0
             apps.forEach(function (app) {
@@ -514,6 +515,101 @@ describe('agents', function () {
                         stats.meter.toJSON().should.have.property('count', 0);
                         stats.histogram.toJSON().should.have.property('count', 0);
                     });
+                });
+                agentconn.close();
+            });
+
+            prom = prom.delay(100);
+
+            prom = prom.then(function () {
+                return BPromise.each(apps, function (app) {
+                    app.close();
+                });
+            });
+
+            return prom;
+        });
+
+        ok.done(function () {
+            done();
+        }, done);
+    });
+
+
+    it('should clear old locks', function (done) {
+        var ok = utils.createServers(2),
+            agentname = 'agent1',
+            jobname = 'myjob',
+            date = Date.now(),
+            lockData = {
+                agent_name: agentname,
+                job_name: jobname,
+                lock_data: [{key: 'testlock', locking: true}],
+                date: date
+            };
+
+        ok = ok.delay(100);
+
+        // spy on the start job function
+        sinon.spy(basecontroller, 'startJob');
+
+        ok = ok.then(function (apps) {
+            var main = apps[0],
+                agentconn = utils.agentConnect(),
+                prom;
+
+
+            main.state.isMaster.should.be.true;
+
+            prom = agentconn.emitPromise('identify', agentname);
+
+            prom = prom.then(function () {
+                return agentconn.emitPromise('register-job', jobname, agentname);
+            });
+
+            prom = prom.then(function () {
+                apps.forEach(function (app) {
+                    app.state.jobs.should.have.property('active_jobs', {});
+                    app.state.agents[agentname].jobs.should.have.property(jobname);
+                });
+            });
+
+            prom = prom.then(function () {
+                return agentconn.emitPromise('handle-locks', lockData);
+            });
+
+            prom = prom.then(function (status) {
+
+                // startJob is called once by each governor in the cluster
+                basecontroller.startJob.callCount.should.equal(2);
+                basecontroller.startJob.restore();
+                apps.forEach(function (app) {
+                    var jobs = app.state.jobs;
+                    jobs.active_jobs.should.have.property(status.id);
+                });
+
+                main.state.shared.locks.should.have.property('testlock');
+
+                main.state.jobMaxAge = 500;
+                apps[1].state.clusterEmit('clear-old-jobs');
+            });
+
+            prom = prom.delay(2000);
+
+            prom = prom.then(function () {
+                main.state.shared.locks.should.not.have.property('testlock');
+                apps.forEach(function (app) {
+                    var job = app.state.jobs[jobname],
+                        agent = app.state.agents[agentname],
+                        agentjob = agent.jobs[jobname];
+
+                    [job, agent, agentjob].forEach(function (stats) {
+                        stats.meter.toJSON().should.have.property('count', 0);
+                        stats.histogram.toJSON().should.have.property('count', 0);
+                        stats.timeoutmeter.toJSON().should.have.property('count', 1);
+                    });
+
+                    app.state.shared.locks.should.not.have.property('testlock');
                 });
                 agentconn.close();
             });
