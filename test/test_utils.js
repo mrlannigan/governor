@@ -4,7 +4,8 @@ var Bunyan = require('bunyan'),
     BPromise = require('bluebird'),
     Application = require('../lib/application'),
     socketClient = require('socket.io-client'),
-    log = require('../lib/log');
+    log = require('../lib/log'),
+    createServer;
 
 
 exports.agentConnect = function () {
@@ -40,7 +41,7 @@ exports.agentConnect = function () {
     return agentconnection;
 };
 
-var createServer = exports.createServer = function (args) {
+createServer = exports.createServer = function (args) {
 
     var logger = Bunyan.createLogger({
             name: 'governor',
@@ -50,10 +51,9 @@ var createServer = exports.createServer = function (args) {
             }],
             serializers: log.serializers
         }),
-        startupLogger = logger.child({startup: true});
+        startupLogger = logger.child({startup: true}),
+        app = new Application();
 
-
-    var app = new Application();
     app.setArguments(args)
         .setLogger(logger, startupLogger)
         .setNodeName(args.n);
