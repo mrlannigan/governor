@@ -10,6 +10,8 @@ var Bunyan = require('bunyan'),
     args = new Daemon.Arguments(process.argv),
     app,
     logger,
+    logLevel,
+    logOutput,
     startupLogger;
 
 if (args.error) {
@@ -24,13 +26,27 @@ if (args.h) {
     process.exit(0);
 }
 
+logLevel = args.environment.development ? Bunyan.TRACE : Bunyan.INFO;
+
+if (args['log-path']) {
+    logOutput = {
+        type: 'rotating-file',
+        path: args['log-path'],
+        period: 'daily',
+        count: 90,
+        level: logLevel
+    };
+} else {
+    logOutput = {
+        stream: process.stdout,
+        level: logLevel
+    };
+}
+
 // create logger
 logger = Bunyan.createLogger({
     name: 'governor',
-    streams: [{
-        stream: process.stdout,
-        level: args.environment.development ? Bunyan.TRACE : Bunyan.INFO
-    }],
+    streams: [logOutput],
     serializers: log.serializers
 });
 startupLogger = logger.child({startup: true});
