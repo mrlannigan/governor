@@ -28,7 +28,7 @@
   "homepage": "https://github.com/mrlannigan/governor",
   "dependencies": {
     "bluebird": "^2.x.x",
-    "bossy": "^1.x.x",
+    "bossy": "1.0.0.",
     "bunyan": "^1.x.x",
     "hapi": "^8.x.x",
     "hoek-boom": "^1.1.0",
